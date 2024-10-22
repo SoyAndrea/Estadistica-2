@@ -1,0 +1,499 @@
+---
+title: "Estadística 2 - trabajo final"
+author: "Andrea Gomez Vargas"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::downcute:
+    df_print: kable
+  html_document:
+    df_print: paged
+  word_document: null
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+options(scipen = 9999)
+```
+
+```{r librerias, message=FALSE, warning=FALSE}
+library(rstatix)
+library(haven)
+library(olsrr)
+library(ggpubr)
+library(apa)
+library(apaTables)
+library(plyr)
+library(haven)
+library(olsrr)
+library(caret)
+library(oddsratio)
+library(DescTools)
+library(MASS)
+```
+
+
+## Ejercicio ANOVA
+
+```{r}
+datos <- data.frame(densidad = c(0.9,0.91,0.87,0.9,0.9,0.8,
+                                 0.86,0.88,0.89,0.82,0.91,0.83,
+                                 0.93,0.86,0.88,0.85,0.87,0.8,
+                                 0.79,0.86,0.82,0.85,0.8,0.85),
+                    harina = factor(rep_len(c("General", "Tortas"), length.out = 24)),
+                    azucar = c(rep("0",3),rep("50",3),rep("75",3),rep("100",3),rep("0",3),rep("50",3),rep("75",3),rep("100",3))
+                    ) 
+```
+
+- Chequeo de normalidad y homocedasticidad
+- Chequeo que se cumplan los supuestos de normalidad y homocedasticidad de variancias para poder hacer el analisis de variancias
+
+- testeo de normalidad de las variables
+
+```{r}
+shapiro.test(datos$densidad)
+
+ggpubr::ggqqplot(datos, "densidad")
+```
+
+como el pv del test de normalidad de Shapiro-Wilk es *0.356 > 0.05* no rechazo la hipotesis nula de normalidad de la variable densidad de las tortas
+
+
+- testeo de homocedasticidad de varianzas
+
+```{r}
+levene_test(datos, densidad ~ harina * azucar)
+```
+
+- Como el pv del test de homocedasticidad de variancias de Levene es 0.88 > 0.05 no rechazo la hipotesis nula de homocedasticidad
+
+
+- Anova de dos factores con interaccion 
+
+```{r}
+anova1 <- aov(densidad ~ harina * azucar, data=datos)
+summary(anova1)
+```
+
+
+### 1.	Existen diferencias estadísticamente significativas debidas al tipo de harina utilizada?
+
+> En base a la evidencia observada se puede concluir que no existen diferencias significativas para la densidad media de las tortas segun el tipo de harina utilizado con un nivel de significacion del 5% cuando el porcentaje de concentracion de zucar y la interaccion entre la concentraccion de azucar y el tipo de harina se consideran en el modelo.
+
+
+### 2.	Existen diferencias estadísticamente significativas debidas al nivel de endulzamiento utilizado?
+
+> En base a la evidencia observada se puede concluir que no existen diferencias significativas para la densidad media de las tortas segun la concentracion de azucar utilizada con un nivel de significacion del 5% cuando el tipo de harina y la interaccion entre la concentracion de azucar y el tipo de harina se consideran en el modelo.
+
+
+### 3.	Existe interacción estadísticamente significativa entre los factores considerados?
+
+> Como el pv del test para el efecto de la interaccion es 0.04 < 0.05 con un nivel de significacion del 5% se puede concluir que existe interaccion significativa entre el tipo de harina y la concentracion de azucar. Es decir, que la diferencia en la densidad media de las tortas cuando se usa harina común o harina para tortas es distinta segun el nivel de concentracion de azucar.
+
+```{r}
+anova_test(datos, densidad ~ harina * azucar)
+```
+
+
+> La interaccion entre el tipo de harina el porcentaje de concentracion de azucar explica el 38,8% de la variancia de la densisdad de las tortas.
+
+### 4.	Realizar los gráficos de medias e interpretar.
+
+
+```{r }
+with(datos, interaction.plot(harina, azucar, densidad, 
+                             fun = mean, main = "Gráfico de interacción"))
+```
+
+
+```{r fig.width= 10, fig.height= 6}
+aggregate(densidad ~ harina + azucar, datos, mean)
+```
+
+> Como se observa en el grafico para un porcentaje de concentracion de azucar fijo la densidad de las tortas es mayor cuando se usa harina general en comparacion con cuando se usa harina para tortas, excepto cuando la concentracion de azucar es de 100 donde la densidad de las tortas es menor cuando se usa harina general
+
+
+## Ejercicio Regresión
+
+```{r}
+datos <- read_sav("EVALUACION/p081.sav")
+```
+
+
+### 1.	Cuál es el nivel de asociación lineal de las variables predictoras con la variable Sales? Comentar.
+
+```{r}
+m0 <- lm(SALES ~ AGE + HS + INCOME + BLACK + FEMALE + PRICE, data = datos)
+
+# Correlacion de cada predictor con la variable dependiente
+ols_correlations(m0)
+```
+
+> Todas las variables presentan correlaciones linealres positivas excepto por el precio promedio del paquete de cigarrillos (PRICE) que presenta una correlacion lineal negativa. Las variables que presentan las mayores correlaciones lineales con la variable SALES (cantidad de cigarrillos vendidos per capita) son AGE (edad mediana) y PRICE que superan el 0.3 de valor de correlacion en valor absoluto. El resto de las variables presentan valores de correlacion lineal leves, menores al 0.3
+
+###  2.	Realizar una regresión lineal múltiple, seleccionando los mejores predictores entre las variables independientes disponibles, utilizando un método de selección automática. Describir el proceso de selección automática utilizado. (Sug. Considerar como probabilidad de entrada 0.10 y de salida del modelo 0.15.)
+
+```{r}
+ols_step_both_p(m0, p_enter  = 0.10, p_remove  = 0.15)
+```
+
+> Se utiliza un metodo de seleccion secuencial para la definicion del modelo final. En particular se utilizo el Metodo Stepwise. Este metodo comienza realizando todos los modelos de regresion simple entre la variable dependiente (SALES) y cada una de las variables explicativas y se elige como modelo inicial aquel con mayor valor del coeficiente de determinacion R^2, es decir, aquel da el mayor incremento de la suma de cuadrados de la regresion (SSR). A partir del modelo inicial se incorporan variables secuencialmente tomando en cada paso aquella que al ser sumada al modelo genera el mayor incremento de SSR y a su vez tiene una significacion individual mayor a la cota elgida, en este caso que el test de que el parametro asociado a esa variable sea igual a 0 tenga pv menor de 0,1. A su vez en cada paso se elimina la variable con menor nivel de significacion individual siempre que esta sea menor que una cota determinada, en este caso que el test de que el parametro asociado a esa variable sea igual a 0 tenga un pvalue mayor a 0,15.
+
+> Este proceso de seleccion termina en un modelo para la variable SALES (cantidad de cigarrillos vendidos) con los regresores INCOME (ingreso personal per capita), PRICE (precio promedio del paquete de cigarrilos) y AGE (edad mediana)
+
+
+```{r}
+m1 <- lm(SALES ~ INCOME + PRICE + AGE, datos)
+summary(m1)
+```
+
+###  3.	Qué información da el coeficiente de determinación?
+
+> El coeficiente de determinacion (R^2) es una medida que ayuda a evaluar la bondad del ajuste del modelo de regresion. Es la proporcion de variancia de la variable dependiente, SALES en nuestro caso, que es explicada por el modelo. Es una medida que varia entre 0 y 1, es mejor mientras mas se acerque a 1.
+
+> El coeficiente de correlacion aumenta mientras mas variables se incluyan en el modelo de regresion. Es por eso que para el caso de regresion multiple es preferible usar el coeficiente de correlacion ajustado que penaliza al coeficiente de correlacion del modelo por cada variable que se suma al modelo
+
+###  4.	Cuáles son los supuestos necesarios para definir la prueba inferencial de los estimadores de los parámeros?
+
+> Para que la inferencia sobre los parametros del modelo de regresion sea valida se debe cumplir que los errores del modelo sean aleatorios y tengan una distribucion normal con media 0 y variancia constante
+
+
+###  5.	Analizar la bondad del ajuste del modelo obtenido, comentando los indicadores y/o test que considera.
+
+```{r}
+summary(m1)
+```
+
+
+
+> Para evaluar la bondad del ajuste lo primero que se evalua es que los predictores sean significativos para explicar la variable dependiente, es decir que se pueda determinar que el valor del parametro asociado a cada predictor sea distinto 0 en presencia del resto de las variables. Para esto se evalua el pv asociado al test de significacion para cada variable del modelo. En el caso del modelo evaluado las variables INCOME y PRICE son significativas comparandolas con un nivel de significacion del 5%, y la variable AGE es significativa comparandola con un nivel de significacion del 10%.
+
+> Otra medida para evaluar la bondad del ajuste es el R^2 ajustado que en el caso del modelo es de 0,259 el cual se puede considerar un valor bajo por lo que el modelo no presentaria un buen ajuste.
+
+###  6.	Realizar un análisis de los residuos del modelo para evaluar el cumplimiento de los supuestos. Para esto, realizar gráficos de los residuos con el valor predicho.
+
+```{r}
+#gráfico de los residuos para evaluar normalidad 
+ols_plot_resid_qq(m1)
+#Test de normalidad de los residuos 
+shapiro.test(residuals(m1))
+
+```
+
+> Por el QQ-norm, en el cual se observa que la cola de la distribucion de los residuos se aleja de la distribucion normal, y por el pv del test de normalidad de Shapiro-Wilk que es menor que 0.05 se rechaza la hipotesis de normalidad de los residuos.
+
+```{r}
+#Grafico de los residuos vs los valores predichos
+ols_plot_resid_stud_fit(m1, print_plot = TRUE)
+```
+
+
+>  En el grafico de los residuos vs los valores predichos no parece haber evidencia de que la variancia de los residuos no sea constante ni que exista una relacion no lineal. Si se observa evidencia de observaciones que pueden ser consideradas outliers y que pueden estar afectando al ajuste de regresion.
+
+###  7.	Analizar la colinealidad de las variables predictoras presentes en la ecuación.
+
+```{r}
+ols_vif_tol(m1)
+```
+
+
+> Para determinar la existencia de multicolinealidad se evalua la correlacion lineal entre los predictores del modelo. Como para ninguna de las variables independientes del modelo el variance inflation factor (VIF) es mayor que 10 se concluye que no existe multicolinealidad entre los regresores INCOME, PRICE y AGE.
+
+###  8.	Analizar la presencia de observaciones atípicas y/o influyentes. Comentar y resolver según el caso.
+
+```{r}
+# Distancia de Cook
+ols_plot_cooksd_bar(m1)
+# dffits
+ols_plot_dffits(m1)
+```
+
+> Segun el criterio de la distancia de Cook las observaciones 9, 12, 29 y 30 son outliers, ya sea por parte de la variable dependiente o de las regresoras. Segun el criterio DFFIT se comprueba que las cuatro observaciones identificadas son influyentes ya que el cambio en el valor ajustado supera el threshold cuando se omite cada una de esos casos.
+
+ > Como la regresion puede verse fuertemente afectada por la presencia de outliers en este caso se toma la determinacion de eliminar estas observaciones y volver a ajustar el modelo. Otra opcion podria ser realizar un ajuste de regresion robusto que no se viera tan influenciado por la presencia de estos outliers
+ 
+ 
+ 
+```{r}
+datos2 <- datos[-c(9,12,29,30), ]
+
+m2 <- lm(SALES ~ AGE + INCOME + PRICE, data = datos2)
+summary(m2)
+
+#gráfico de los residuos para evaluar normalidad 
+ols_plot_resid_qq(m2)
+#Test de normalidad de los residuos 
+shapiro.test(residuals(m2))
+
+#Grafico de los residuos vs los valores predichos
+ols_plot_resid_stud_fit(m2, print_plot = TRUE)
+```
+
+
+
+> La eliminacion de las observaciones detectadas como outliers modifica significativamente el ajuste de regresion. La significacion de los parametros que acompañan a los regresores aumento siendo el pv asociado a cada parametro menor a 0,05 en todos los casos. El R^2 ajustado aumento a 0,412. Por ultimo el test de normalidad de los residuos que previamente se rechazaba ahora arroja un pv de 0,067 > 0,05 por lo que ya no se rechazaria el supuesto de normalidad.
+
+## Ejercicio Regresión logística
+
+```{r}
+LOWBWT <- read_sav("EVALUACION/LOWBWT.sav")
+
+LOWBWT <-LOWBWT %>% mutate(LOW = factor(LOW),
+                RACE = factor(RACE),
+                SMOKE = factor(SMOKE),
+                HT = factor(HT),
+                UI = factor(UI))
+
+dplyr::glimpse(LOWBWT)
+```
+
+
+###  1.	Calcular el riesgo relativo y los odds ratio de la variable dependiente con cada una las variables dicotómicas. Analizar los resultados.
+
+- SMOKE -  fumadora o no fumadora
+
+```{r}
+table(LOW = LOWBWT$LOW, SMOKE = LOWBWT$SMOKE)
+
+rr = (30/(30+44)) / (29/(29+86))
+rr
+```
+
+
+> El riesgo relativo es 1,6,  por lo que el riesgo de que el bebe nazca con bajo peso es 1,6 veces mayor en las madres que fumaron durante el embarazo que en las madres que no fumaron durante el embarazo
+
+
+```{r}
+odds = (30/44) / (29/86)
+odds
+```
+
+> Las posibilidades de que el bebe tenga bajo peso es el doble en las madres que fumaron durante el embarazo comparadas con las madres que  no fumaron
+
+- HT - hipertensión o no hipertensión
+
+
+```{r}
+table(LOW = LOWBWT$LOW, HT = LOWBWT$HT)
+
+rr = (7/(7+5)) / (52/(52+125))
+rr
+```
+> El riesgo relativo es 1,9, el riesgo de que el bebe nazca con bajo peso es casi dos veces mayor en las madres que fumaron durante el embarazo frente a las que no lo hicieron.
+
+```{r}
+odds = (7/5) / (52/125)
+odds
+```
+> Las posibilidades de que el bebe tenga bajo peso es más del triple para las madres que fumaron durante el embarazo frente a las que no
+
+- UI - con irritabilidad uterina o sin irritabilidad uterina
+
+```{r}
+table(LOW = LOWBWT$LOW, UI = LOWBWT$UI)
+
+rr = (14/(14+14)) / (45/(45+116))
+rr
+```
+> El riesgo relativo es 1,7, el riesgo de que el bebe nazca con bajo peso es 1,7 veces mayor en las madres que fumaron durante el embarazo frente a las que no.
+
+```{r}
+odds = (14/14) / (45/116)
+odds
+```
+
+> Las posibilidades de que el bebe tenga bajo peso es del 2,5 para las madres que fumaron durante el embarazo frente a las que no lo hicieron.
+
+### 2.	Cuál es la definición de odds ratio? Qué información suministra y de qué manera puede calcularse utilizando la regresión logística?
+
+El odds ratio (OR) es una medida estadística utilizada para cuantificar la fuerza de la asociación entre una exposición (variable independiente) y un resultado binario (variable dependiente). Y en la regresión logística para estimar la relación entre una o más variables predictoras y un evento de interés.
+
+
+Definición del Odds Ratio: El odds ratio compara la probabilidad de que ocurra un evento en un grupo expuesto con la probabilidad de que ocurra en un grupo no expuesto. Matemáticamente, el odds ratio se define como la razón de las "odds" (probabilidades) de que ocurra un evento en el grupo expuesto frente al grupo no expuesto.
+
+
+$OR = \frac{\text{odds en el grupo expuesto}}{\text{odds en el grupo no expuesto}}$ 
+
+Las odds de un evento se calculan como la razón entre la probabilidad de que ocurra el evento (p) y la probabilidad de que no ocurra (1−p):
+
+$\text{odds} = \frac{p}{1 - p}$
+
+Interpretación del Odds Ratio:
+
+- *OR = 1:* No hay asociación entre la exposición y el evento (las probabilidades de ocurrencia son iguales en ambos grupos).
+
+- *OR > 1:* La exposición está asociada con un mayor odds de que ocurra el evento.
+
+- *OR < 1:* La exposición está asociada con un menor odds de que ocurra el evento.
+
+Odds Ratio en Regresión Logística:
+En la regresión logística, el modelo predice la probabilidad de que ocurra un evento (Y=1) dado un conjunto de variables independientes $X_1, X_2, \dots, X_n $. El odds ratio se obtiene a partir de los coeficientes de la regresión logística.
+
+
+1. El modelo tiene la forma:
+
+$\log \left( \frac{p}{1 - p} \right) = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \dots + \beta_n X_n$
+
+2. Cada coeficiente $\beta_i$ representa el cambio logarítmico en las odds del evento por unidad de cambio en la variable independiente  $X_i$, manteniendo constantes las demás variables.
+
+
+3. Para interpretar el efecto de  $X_i$ sobre las odds, se toma el exponente del coeficiente: $OR = e^{\beta_i}$
+
+Este valor del odds ratio nos dice cómo cambian las odds del evento cuando la variable\( X_i \) aumenta en una unidad, manteniendo constantes las demás variables.
+
+
+$OR = e^{\beta_i}$
+
+Este valor del odds ratio nos dice cómo cambian las odds del evento cuando la variable aumenta en una unidad, mientras las demás se mantienen constantes.
+  
+  
+  
+###  3.	Calcule los odds ratio de cada una de las variables predictoras disponibles con la variable dependiente? Comentar.
+
+- FTV
+
+```{r}
+OddsRatio(glm(LOW ~ FTV,data=LOWBWT,family="binomial"), show.ci = T)
+```
+El intervalo de confianza incluye el 1, lo que sugiere que el efecto de la variable FTV no es estadísticamente significativo a un nivel del 5%.
+
+
+- AGE 
+
+```{r}
+OddsRatio(glm(LOW ~ AGE,data=LOWBWT,family="binomial"), show.ci = T)
+```
+
+el OR de este modelo no es significativo, quiere decir que la edad de la madre parece no tener relación con el nacimiento de bajo peso del hijo. Dado que el intervalo de confianza incluye 1, esto sugiere que el efecto de la variable edad no es estadísticamente significativo.
+
+- LWT 
+
+```{r}
+OddsRatio(glm(LOW ~ LWT,data=LOWBWT,family="binomial"), show.ci = T)
+```
+
+La variable peso de la madre (LWT) muestra un odds ratio de 0.986, lo que indica que un aumento en el peso de la madre está asociado con una disminución en la probabilidad del evento, y este efecto es estadísticamente significativo. El intervalo de confianza no incluye 1 y está por debajo de él, lo que indica que el efecto de la variable LWT es estadísticamente significativo a un nivel del 5%.
+
+- RACE 
+
+```{r}
+OddsRatio(glm(LOW ~ factor(RACE),data=LOWBWT,family="binomial"), show.ci = T)
+```
+
+El grupo de raza 2 tiene odds de que ocurra el evento de interés aproximadamente 2.328 veces mayores en comparación con el grupo de referencia. En otras palabras, ser parte del grupo de raza 2 se asocia con una mayor probabilidad del evento. El grupo de raza 3 tiene odds de que ocurra el evento de interés aproximadamente 1.889 veces mayores en comparación con el grupo de referencia.
+
+- SMOKE 
+
+```{r}
+OddsRatio(glm(LOW ~ factor(SMOKE),data=LOWBWT,family="binomial"), show.ci = T)
+```
+La intercepción es significativa, lo que sugiere un efecto claro en el modelo. La variable fumar (SMOKE) muestra un odds ratio de 2.022, lo que indica que fumar se asocia con un aumento en la probabilidad del nacimiento del hijo con bajo peso, y este efecto es estadísticamente significativo.
+
+
+- PTL 
+
+```{r}
+OddsRatio(glm(LOW ~ factor(PTL),data=LOWBWT,family="binomial"), show.ci = T)
+```
+
+Esto significa que las mujeres con antecedentes de un embarazo prematuro (grupo 1) tienen odds de que ocurra el evento de interés aproximadamente 5.756 veces mayores en comparación con el grupo de referencia (sin antecedentes). Esto sugiere que tener un embarazo prematuro previo está asociado con una probabilidad significativamente mayor del evento. Las mujeres con antecedentes de un solo embarazo prematuro (PTL 1) muestran un aumento significativo en las odds del evento de interés. Las variables PTL 2 y PTL 3 no son significativas, especialmente la tercera, que carece de eventos observados.
+
+
+- HT
+```{r}
+OddsRatio(glm(LOW ~ factor(HT),data=LOWBWT,family="binomial"), show.ci = T)
+```
+
+La variable antecedentes de hipertensión arterial (HT) muestra un odds ratio de 3.365, lo que indica que tener hipertensión está asociado con un aumento significativo en la probabilidad del evento de interés.
+
+- UI 
+
+```{r}
+OddsRatio(glm(LOW ~ factor(UI),data=LOWBWT,family="binomial"), show.ci = T) 
+```
+Esto significa que las personas con irritabilidad uterina tienen odds de que ocurra el evento aproximadamente 2.578 veces mayores en comparación con aquellos sin irritabilidad uterina. Indica que la irritabilidad uterina está asociada con una mayor probabilidad del evento.
+
+  
+
+
+### 4.	Realizar una regresión logística múltiple, seleccionando los mejores predictores entre las variables independientes disponibles, utilizando un método de selección automática.
+
+
+```{r}
+modelo1 <- glm(LOW ~ 1, family = binomial, data = LOWBWT)
+
+modelo2 <- 
+  stepAIC(modelo1, scope = list(upper = ~AGE+LWT+factor(RACE)+SMOKE+PTL+HT+UI+FTV, lower = ~ 1),
+
+direction = c("both"),trace = T)
+```
+
+El modelo final incluye las variables con una **AIC de 217.99**, siendo este el modelo más adecuado:
+
+      PTL	Antecedentes de embarazos prematuros
+      LWT	Peso de la madre
+      HT	Antecedentes de hipertensión arterial
+      RACE	Raza
+      SMOKE	Fumó en el embarazo
+      UI	Irritabilidad uterina
+
+
+
+###  5.	Según el modelo obtenido, cuáles son los principales factores de riesgo del bajo peso y cuál es la magnitud de su efecto?
+
+```{r}
+OddsRatio(modelo2)
+```
+
+
+> Los principales factores de riesgo son las variables de Antecedentes de hipertensión arterial (HT1) y raza negra (RACE- 2), con un OR  de 6,39 y 3,76 respectivamente, 
+
+### 6.	Cuáles son los supuestos necesarios para definir la prueba inferencial de los estimadores de los parámetros?
+
+Los supuestos necesarios para definir la prueba inferencial de los estimadores de los parámetros en una regresión logística son:
+
+  - Relación lineal entre las variables independientes y el logit de la variable dependiente.
+  - Independencia de las observaciones.
+  - Ausencia de multicolinealidad entre las variables independientes.
+  - Tamaño de muestra suficientemente grande para garantizar estimaciones confiables.
+  - Uso del método de máxima verosimilitud para la estimación de los parámetros, lo que implica maximizar la probabilidad conjunta de los datos observados dado el modelo.
+
+
+
+### 7.	Indicar porcentaje de casos bien predichos por el modelo.
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+library(caret)
+library(oddsratio)
+library(e1071)
+```
+
+
+```{r}
+prob_model <- predict(modelo2, type = "response")
+
+predicted <- ifelse(prob_model > 0.5, 1, 0)
+
+matriz <- confusionMatrix(data = as.factor(predicted), reference = as.factor(LOWBWT$LOW), positive = "1")
+
+matriz
+```
+
+Resultados de la matriz:
+
+- Predicciones correctas para el bajo peso (0): 119 (TN)
+- Predicciones incorrectas para el bajo peso (0): 11 (FP)
+- Predicciones correctas para el peso normal (1): 22 (TP)
+- Predicciones incorrectas para el peso normal (1): 37 (FN)
+
+Bajo peso (0):
+
+- Verdaderos negativos (TN): 119 (predicciones correctas de bajo peso)
+- Falsos positivos (FP): 11 (predicciones incorrectas de bajo peso, pero eran peso normal)
+
+Peso normal (1):
+
+- Falsos negativos (FN): 37 (predicciones incorrectas de peso normal, pero eran bajo peso)
+- Verdaderos positivos (TP): 22 (predicciones correctas de peso normal)
+
+
+> El modele cuenta con una alta especificidad del 91.54% y una sensibilidad baja del 37,2%, lo que sugiere que es muy efectivo para identificar casos sin bajo peso, pero tiene dificultades para detectar casos con bajo peso.
